@@ -1,0 +1,9 @@
+﻿out/
+out_teste/
+backup_pre_mysql/
+*.class
+*.log
+login_*.txt
+.env
+.vscode/
+.idea/
