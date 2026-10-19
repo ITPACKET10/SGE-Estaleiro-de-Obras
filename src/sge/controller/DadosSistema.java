@@ -3,8 +3,7 @@ package sge.controller;
 import sge.model.*;
 import sge.controller.*;
 import sge.view.*;
-import sge.repository.*;
-
+import sge.repository.Arquivo;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,12 +22,104 @@ public class DadosSistema {
 
     public static ArrayList<Usuario> usuarios = new ArrayList<>();
     public static ArrayList<Material> materiais = new ArrayList<>();
+    private static sge.repository.MaterialRepositoryMySQL repositorioMateriais;
+
+public static void configurarRepositorioMateriais(
+        sge.repository.MaterialRepositoryMySQL repositorio) {
+    repositorioMateriais = repositorio;
+}
+
     public static ArrayList<Venda> vendas = new ArrayList<>();
     public static ArrayList<Cliente> clientes = new ArrayList<>();
 
     static {
         carregarPadroes();
     }
+ 
+public static void verificarMateriaisParaMigracao() {
+    System.out.println("===== MATERIAIS ACTUAIS DO SGE =====");
+
+    for (Material material : materiais) {
+        System.out.println(
+            "Nome: " + material.getNome()
+            + " | Quantidade: " + material.getQuantidade()
+            + " | Preço: " + material.getPreco()
+            + " | Total vendido: " + material.getTotalVendido()
+        );
+    }
+
+    System.out.println(
+        "Total de materiais: " + materiais.size()
+    );
+}
+  
+public static void carregarMateriaisMySQL(
+        sge.repository.MaterialRepositoryMySQL repositorio)
+        throws java.sql.SQLException {
+
+    List<Material> materiaisCarregados = repositorio.listar();
+
+    // Substituir a lista apenas depois de uma leitura bem-sucedida
+    materiais.clear();
+    materiais.addAll(materiaisCarregados);
+
+    System.out.println(
+        "[SGE] Materiais carregados do MySQL: "
+        + materiais.size()
+    );
+}
+
+public static void verificarIdsMateriaisMySQL(
+        sge.repository.MaterialRepositoryMySQL repositorio)
+        throws java.sql.SQLException {
+
+    List<Material> lista = repositorio.listar();
+
+    System.out.println("===== MATERIAIS DO MYSQL =====");
+
+    for (Material m : lista) {
+        System.out.println(
+            "ID: " + m.getId()
+            + " | Nome: " + m.getNome()
+            + " | Stock: " + m.getQuantidade()
+            + " | Vendido: " + m.getTotalVendido()
+        );
+    }
+
+    System.out.println("Total no MySQL: " + lista.size());
+}
+
+public static void testarCarregamentoMateriaisMySQL() {
+    try {
+        sge.repository.MaterialRepositoryMySQL repositorio =
+    new sge.repository.MaterialRepositoryMySQL(
+        System.getenv("SGE_DB_USER"),
+        System.getenv("SGE_DB_PASSWORD")
+    );
+        List<Material> materiaisMySQL = repositorio.listar();
+
+        System.out.println(
+            "[SGE] Materiais encontrados no MySQL: "
+            + materiaisMySQL.size()
+        );
+
+        for (Material material : materiaisMySQL) {
+            System.out.println(
+                "ID: " + material.getId()
+                + " | Nome: " + material.getNome()
+                + " | Stock: " + material.getQuantidade()
+                + " | Vendido: " + material.getTotalVendido()
+            );
+        }
+
+    } catch (java.sql.SQLException erro) {
+        System.err.println(
+            "[SGE] Erro ao consultar materiais no MySQL: "
+            + erro.getMessage()
+        );
+    }
+}
+
 
     private static void carregarPadroes() {
         usuarios.add(new Presidente(
@@ -53,12 +144,32 @@ public class DadosSistema {
         Material m5 = new Material("Tinta branca 20L", 45, 2850, "/imagens/tinta.png", "Acabamento", "Tintas Coral"); m5.setDisponivelCaixa(true); materiais.add(m5);
     }
 
-    public static void carregarDados() {
-        carregarUsuariosFicheiro();
+
+public static void carregarDados() {
+    carregarUsuariosFicheiro();
+    carregarVendasFicheiro();
+    carregarClientesFicheiro();
+
+    if (repositorioMateriais != null) {
+        try {
+            carregarMateriaisMySQL(repositorioMateriais);
+            System.out.println(
+                "[SGE] Materiais carregados do MySQL."
+            );
+        } catch (java.sql.SQLException erro) {
+            System.err.println(
+                "[SGE] Falha ao carregar materiais: "
+                + erro.getMessage()
+            );
+            carregarMateriaisFicheiro();
+        }
+    } else {
         carregarMateriaisFicheiro();
-        carregarVendasFicheiro();
-        carregarClientesFicheiro();
+        System.out.println(
+            "[SGE] MySQL não configurado. A utilizar ficheiros locais."
+        );
     }
+}
 
     private static void carregarUsuariosFicheiro() {
         List<String> linhas = Arquivo.lerLinhas("usuarios.txt");
@@ -177,14 +288,95 @@ public class DadosSistema {
         Arquivo.substituirTudo("usuarios.txt", linhas);
     }
 
-    public static void salvarMateriais() {
-        List<String> linhas = new ArrayList<>();
-        for (Material m : materiais) {
-            if (m.getNome() == null || m.getNome().trim().isEmpty()) continue;
-            linhas.add(m.getNome() + ";" + m.getQuantidade() + ";" + m.getPreco() + ";" +
-                    m.getCategoria() + ";" + m.getFornecedor() + ";" + m.getImagem() + ";" +
-                    m.isDisponivelCaixa() + ";" + m.getDataRegisto());
+  
+public static void salvarMateriais() {
+
+    if (repositorioMateriais != null) {
+        try {
+            guardarMateriaisMySQL(repositorioMateriais);
+
+        } catch (java.sql.SQLException erro) {
+            System.err.println(
+                "[SGE] Erro ao guardar materiais no MySQL: "
+                + erro.getMessage()
+            );
+
+            throw new IllegalStateException(
+                "Não foi possível guardar o stock no MySQL.",
+                erro
+            );
         }
-        Arquivo.substituirTudo("materiais.txt", linhas);
     }
+
+    // Manter também uma cópia local dos materiais
+    List<String> linhas = new ArrayList<>();
+
+    for (Material m : materiais) {
+        if (m.getNome() == null ||
+            m.getNome().trim().isEmpty()) {
+            continue;
+        }
+
+        linhas.add(
+            m.getNome() + ";" +
+            m.getQuantidade() + ";" +
+            m.getPreco() + ";" +
+            m.getCategoria() + ";" +
+            m.getFornecedor() + ";" +
+            m.getImagem() + ";" +
+            m.isDisponivelCaixa() + ";" +
+            m.getDataRegisto()
+        );
+    }
+
+    Arquivo.substituirTudo("materiais.txt", linhas);
 }
+
+public static void guardarMateriaisMySQL(
+        sge.repository.MaterialRepositoryMySQL repositorio)
+        throws java.sql.SQLException {
+
+    // Verificar todos os materiais antes de gravar
+    for (Material material : materiais) {
+        if (material.getNome() == null ||
+            material.getNome().trim().isEmpty()) {
+            continue;
+        }
+
+        if (material.getQuantidade() < 0 ||
+            material.getPreco() < 0) {
+            throw new java.sql.SQLException(
+                "Dados inválidos no material: " + material.getNome()
+            );
+        }
+    }
+
+    // Gravar materiais novos e actualizar os existentes
+    for (Material material : materiais) {
+        if (material.getNome() == null ||
+            material.getNome().trim().isEmpty()) {
+            continue;
+        }
+
+        if (material.getId() > 0) {
+            boolean actualizado = repositorio.actualizar(material);
+
+            if (!actualizado) {
+                throw new java.sql.SQLException(
+                    "Material não encontrado no MySQL. ID: "
+                    + material.getId()
+                );
+            }
+        } else {
+            // Registar material novo e recuperar o ID gerado
+            repositorio.adicionar(material);
+        }
+    }
+
+    System.out.println("[SGE] Materiais guardados no MySQL.");
+}
+
+}
+
+    
+

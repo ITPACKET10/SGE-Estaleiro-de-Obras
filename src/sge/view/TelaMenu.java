@@ -1040,9 +1040,31 @@ public class TelaMenu extends JFrame {
             int qtd = Integer.parseInt(qtdTexto); if (qtd > material.getQuantidade()) { msg("Stock insuficiente."); return; }
             double preco = material.getPreco();
             double total = qtd * preco;
-            if (material.vender(qtd)) {
-                material.setDisponivelCaixa(material.getQuantidade() > 0 && material.getPreco() > 0);
-                DadosSistema.vendas.add(new Venda(cliente, material.getNome(), qtd, total, vendedor, dataAtual()));
+            
+if (material.vender(qtd)) {
+    material.setDisponivelCaixa(
+        material.getQuantidade() > 0 && material.getPreco() > 0
+    );
+
+    // Guardar o novo stock antes de registar a venda
+    try {
+        DadosSistema.salvarMateriais();
+    } catch (Exception erro) {
+        // Repor a quantidade caso a gravação falhe
+        material.setQuantidade(material.getQuantidade() + qtd);
+        material.setTotalVendido(material.getTotalVendido() - qtd);
+        material.setDisponivelCaixa(
+            material.getQuantidade() > 0 && material.getPreco() > 0
+        );
+
+        msg("Não foi possível guardar a venda no MySQL.");
+        return;
+    }
+
+    DadosSistema.vendas.add(
+        new Venda(cliente, material.getNome(), qtd, total, vendedor, dataAtual())
+    );
+
                 Arquivo.salvar("vendas.txt", dataAtual()+";"+cliente+";"+material.getNome()+";"+qtd+";"+total+";"+vendedor);
                 Arquivo.salvar("movimentos_stock.txt", new MovimentoStock(dataAtual(), material.getNome(), "SAÍDA - Venda", qtd, "Venda a " + cliente, usuarioLogado.getEmail()).serializar());
                 Auditoria.registar(usuarioLogado.getEmail(), "VENDA", material.getNome()+" | Qtd: "+qtd+" | Cliente: "+cliente+" | Total: "+money(total));
@@ -1051,7 +1073,22 @@ public class TelaMenu extends JFrame {
                 msg("Venda realizada com sucesso!\nPreço aplicado: " + money(preco) + "\nTotal: " + money(total));
                 mostrarVendas();
             }
-        } catch (Exception e) { Arquivo.salvar("erros.txt", "Erro ao realizar venda: " + e.getMessage()); msg("Erro ao realizar venda."); }
+      
+} catch (Exception e) {
+    Arquivo.salvar(
+        "erros.txt",
+        "Erro ao finalizar venda com vários materiais: "
+        + e.getMessage()
+    );
+
+    e.printStackTrace();
+
+    msg(
+        "Não foi possível finalizar a venda.\n"
+        + "Verifique o stock e os registos antes de tentar novamente."
+    );
+}
+ 
     }
 
     private void realizarVendaCarrinho(String cliente, DefaultTableModel modeloCarrinho, String vendedor) {
@@ -1079,6 +1116,7 @@ public class TelaMenu extends JFrame {
                 double total = qtd * preco;
                 if (m.vender(qtd)) {
                     m.setDisponivelCaixa(m.getQuantidade() > 0 && m.getPreco() > 0);
+    
                     DadosSistema.vendas.add(new Venda(cliente, m.getNome(), qtd, total, vendedor, dataVenda));
                     Arquivo.salvar("vendas.txt", dataVenda+";"+cliente+";"+m.getNome()+";"+qtd+";"+total+";"+vendedor);
                     Arquivo.salvar("movimentos_stock.txt", new MovimentoStock(dataVenda, m.getNome(), "SAÍDA - Venda", qtd, "Venda a " + cliente, usuarioLogado.getEmail()).serializar());

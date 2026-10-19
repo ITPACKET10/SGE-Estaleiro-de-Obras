@@ -58,9 +58,11 @@ public class TelaLogin extends JFrame {
             setLayout(new GridBagLayout());
 
             try {
-                imagem = new ImageIcon(
-                        getClass().getResource("/imagem/construcao.png")
-                ).getImage();
+                    System.out.println("Imagem carregada de: " +
+        getClass().getResource("/imagem/construcao.png"));
+            imagem = new ImageIcon(
+    "src/imagem/construcao.png"
+).getImage();    
             } catch (Exception e) {
                 imagem = null;
             }

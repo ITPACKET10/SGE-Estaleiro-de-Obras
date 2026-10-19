@@ -11,6 +11,7 @@ import sge.repository.*;
  * <p>Projecto académico SGE: documentação das responsabilidades desta classe.</p>
  */
 public class Material {
+    private int id;
     private String nome;
     private int quantidade;
     private double preco;
@@ -37,6 +38,17 @@ public class Material {
         this.dataRegisto = "-";
     }
 
+    public int getId() {
+    return id;
+}
+
+public void setId(int id) {
+    this.id = id;
+}
+
+public void setTotalVendido(int totalVendido) {
+    this.totalVendido = totalVendido;
+}
     public String getNome() { return nome; }
     public int getQuantidade() { return quantidade; }
     public double getPreco() { return preco; }
